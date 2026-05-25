@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Remix: StoreReportPro (Local Standalone)</title>
+  
+  <!-- Tailwind CSS 4 Browser CDN -->
+  <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+  
+  <!-- Lucide Icon Library -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Google Fonts (Inter & JetBrains Mono) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <!-- Vue 3 CDN -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
+  <style>
+    body {
+      font-family: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    }
+    .font-mono {
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 text-gray-900 transition-colors duration-300">
+
+  <div id="app" class="min-h-screen flex flex-col w-full max-w-3xl mx-auto relative overflow-hidden transition-colors duration-500 pb-32"
+       :class="shouldPulse ? 'bg-red-50' : 'bg-gray-50'">
+    
+    <!-- HEADER -->
+    <header class="border-b px-4 py-4 sticky top-0 z-20 transition-all duration-500"
+            :class="headerClasses">
+      <div class="flex justify-between items-center mb-2">
+        <h1 class="text-xl font-bold tracking-tight"
+            :class="isColoredHeader ? 'text-white' : 'text-gray-900'">
+          StoreReportPro <span class="text-xs font-normal opacity-75">Local</span>
+        </h1>
+        <div class="flex items-center gap-3">
+          <!-- Reset button -->
+          <button @click="resetData"
+                  class="p-2 rounded-full transition-colors"
+                  :class="isColoredHeader ? 'hover:bg-white/20 text-white' : 'hover:bg-gray-100 text-gray-400'"
+                  title="Скинути дані">
+            <i data-lucide="rotate-ccw" class="w-[18px] h-[18px]"></i>
+          </button>
+          
+          <!-- Settings button -->
+          <button @click="showSettings = !showSettings"
+                  class="p-2 rounded-full transition-colors"
+                  :class="isColoredHeader ? 'hover:bg-white/20 text-white' : 'hover:bg-gray-100 text-gray-500'"
+                  title="Налаштування">
+            <i data-lucide="settings-2" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex justify-between items-end">
+        <div class="flex flex-col">
+          <span class="text-lg font-bold tracking-tight mb-1"
+                :class="isColoredHeader ? 'text-white/90' : 'text-gray-900'">
+            {{ formattedDate }}
+          </span>
+          <div class="text-3xl font-mono font-bold leading-none"
+               :class="isColoredHeader ? 'text-white' : 'text-blue-600'">
+            {{ formattedTime }}
+          </div>
+        </div>
+
+        <div>
+          <!-- Alarm status tags -->
+          <div v-if="shouldPulse" 
+               class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white text-red-600 text-xs font-bold shadow-sm animate-pulse">
+            <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+            УВАГА: ЗВІТ НЕ ГОТОВИЙ
+          </div>
+          <div v-else-if="allChecksDone" 
+               class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white text-green-600 text-xs font-bold shadow-sm">
+            <i data-lucide="check" class="w-3.5 h-3.5"></i>
+            ВСЕ ГОТОВО
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- SETTINGS PANEL OVERLAY -->
+    <div v-if="showSettings" 
+         class="fixed inset-0 bg-black/40 backdrop-blur-sm z-30 flex items-end justify-center transition-all duration-300"
+         @click="showSettings = false">
+      <div class="bg-white w-full max-w-3xl rounded-t-3xl p-6 shadow-2xl overflow-y-auto max-h-[90vh]" 
+           @click.stopPropagation>
+        <div class="w-12 h-1.5 bg-gray-200 rounded-full mx-auto mb-6"></div>
+        
+        <!-- Language config -->
+        <section class="mb-8">
+          <h3 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+            <i data-lucide="languages" class="w-4 h-4"></i> Вибір мови / Language
+          </h3>
+          <div class="grid grid-cols-3 gap-3">
+            <button v-for="lang in CONFIG.keyboard_layouts"
+                    :key="lang.id"
+                    @click="currentLang = lang.id"
+                    class="py-3 px-2 rounded-xl text-sm font-semibold transition-all"
+                    :class="currentLang === lang.id ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'">
+              {{ lang.label }}
+            </button>
+          </div>
+        </section>
+
+        <!-- Notification / Alarm Config -->
+        <section class="mb-8">
+          <h3 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+            <i data-lucide="alert-circle" class="w-4 h-4"></i> Нагадування про звітність
+          </h3>
+          <div class="space-y-4">
+            <div class="p-4 bg-gray-50 rounded-2xl">
+              <div class="flex items-center justify-between mb-4">
+                <div>
+                  <p class="font-bold text-gray-800">Контрольний таймер (Alarm)</p>
+                  <p class="text-xs text-gray-500">Підсвічувати червоним за відсутності звітів у проміжок часу</p>
+                </div>
+                <button @click="isAlarmActive = !isAlarmActive"
+                        class="w-12 h-6 rounded-full transition-colors relative"
+                        :class="isAlarmActive ? 'bg-green-500' : 'bg-gray-300'">
+                  <div class="absolute top-1 w-4 h-4 bg-white rounded-full transition-all"
+                       :class="isAlarmActive ? 'right-1' : 'left-1'"></div>
+                </button>
+              </div>
+              
+              <div class="grid grid-cols-2 gap-3 pt-3 border-t border-gray-200">
+                <div>
+                  <label class="text-[10px] font-bold text-gray-400 uppercase block mb-1">Початок тривоги (HH:mm)</label>
+                  <input type="time" 
+                         v-model="alarmStartTime"
+                         class="w-full text-sm font-bold text-blue-600 bg-white rounded-xl border border-gray-200 p-2.5 outline-none focus:ring-2 focus:ring-blue-100">
+                </div>
+                <div>
+                  <label class="text-[10px] font-bold text-gray-400 uppercase block mb-1">Кінець тривоги (HH:mm)</label>
+                  <input type="time" 
+                         v-model="alarmEndTime"
+                         class="w-full text-sm font-bold text-red-600 bg-white rounded-xl border border-gray-200 p-2.5 outline-none focus:ring-2 focus:ring-red-100">
+                </div>
+              </div>
+            </div>
+
+            <!-- Telegram keys -->
+            <div class="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+              <h4 class="text-xs font-bold text-blue-800 uppercase tracking-wider mb-3">Інтеграція з Telegram</h4>
+              <div class="space-y-3">
+                <div>
+                  <label class="text-[10px] font-bold text-blue-400 uppercase block mb-1">Bot Token</label>
+                  <input type="password" 
+                         v-model="botToken"
+                         placeholder="123456:ABC-DEF..."
+                         class="w-full text-xs bg-white rounded-xl border border-blue-100 p-2.5 outline-none focus:ring-2 focus:ring-blue-200">
+                </div>
+                <div>
+                  <label class="text-[10px] font-bold text-blue-400 uppercase block mb-1">Chat ID</label>
+                  <input type="text" 
+                         v-model="chatId"
+                         placeholder="-100..."
+                         class="w-full text-xs bg-white rounded-xl border border-blue-100 p-2.5 outline-none focus:ring-2 focus:ring-blue-200">
+                </div>
+                <button @click="saveCredentials"
+                        class="w-full py-2 bg-blue-600 text-white rounded-xl text-xs font-bold active:scale-95 transition-transform">
+                  Зберегти налаштування Telegram
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Done buttons -->
+        <button @click="showSettings = false"
+                class="w-full py-4 bg-gray-900 text-white rounded-2xl font-bold active:scale-[0.98] transition-transform">
+          Готово
+        </button>
+      </div>
+    </div>
+
+    <!-- MAIN BODY -->
+    <main class="flex-1 p-4">
+      <div class="flex items-center justify-between mb-4 px-1">
+        <h2 class="text-lg font-bold text-gray-800">{{ formats.title }}</h2>
+        <span class="text-xs text-gray-400 font-medium font-mono">Master: {{ CONFIG.user_profile.master_store }}</span>
+      </div>
+
+      <!-- STORES LIST -->
+      <div class="space-y-3">
+        <div v-for="store in stores" 
+             :key="store.id"
+             class="bg-white p-3 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-3 transition-colors"
+             :class="{'bg-green-50/30 border-green-100': store.morning_check && store.evening_check}">
+          
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-1.5 mb-1">
+              <span class="text-xs font-bold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded leading-none">
+                {{ store.prefix }}
+              </span>
+              <span class="text-lg font-mono font-bold text-gray-800 tracking-tighter">
+                {{ store.id }}
+              </span>
+            </div>
+            
+            <div class="relative mt-2">
+              <select v-model="store.status"
+                      @change="saveStores"
+                      class="w-full text-xs font-medium text-gray-500 bg-gray-50 border-none rounded-lg py-1.5 pl-2 pr-6 appearance-none focus:ring-2 focus:ring-blue-100 cursor-pointer">
+                <option v-for="opt in CONFIG.status_options" :key="opt" :value="opt">
+                  {{ opt }}
+                </option>
+              </select>
+              <div class="absolute right-2 top-2 pointer-events-none text-gray-400">
+                <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+              </div>
+            </div>
+          </div>
+
+          <!-- Morning/Evening Check actions -->
+          <div class="flex gap-2">
+            <!-- Morning check button -->
+            <button @click="toggleCheck(store.id, 'morning_check')"
+                    class="w-12 h-12 rounded-xl flex flex-col items-center justify-center transition-all active:scale-95 border relative"
+                    :class="store.morning_check ? 'bg-green-100 border-green-200 text-green-700 font-semibold' : 'bg-gray-50 border-gray-100 text-gray-300'">
+              <i data-lucide="sun" class="w-3.5 h-3.5 mb-0.5" :class="{'text-orange-400': store.morning_check}"></i>
+              <span class="text-[10px] font-bold uppercase">{{ formats.morning.charAt(0) }}</span>
+              <div v-if="store.morning_check" class="absolute -top-1 -right-1 bg-green-500 text-white rounded-full p-0.5 shadow-sm">
+                <i data-lucide="check" class="w-2 h-2"></i>
+              </div>
+            </button>
+
+            <!-- Evening check button -->
+            <button @click="toggleCheck(store.id, 'evening_check')"
+                    class="w-12 h-12 rounded-xl flex flex-col items-center justify-center transition-all active:scale-95 border relative"
+                    :class="store.evening_check ? 'bg-indigo-100 border-indigo-200 text-indigo-700 font-semibold' : 'bg-gray-50 border-gray-100 text-gray-300'">
+              <i data-lucide="moon" class="w-3.5 h-3.5 mb-0.5" :class="{'text-indigo-400': store.evening_check}"></i>
+              <span class="text-[10px] font-bold uppercase">{{ formats.evening.charAt(0) }}</span>
+              <div v-if="store.evening_check" class="absolute -top-1 -right-1 bg-indigo-500 text-white rounded-full p-0.5 shadow-sm">
+                <i data-lucide="check" class="w-2 h-2"></i>
+              </div>
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </main>
+
+    <!-- FLOATING FOOTER ACTIONS -->
+    <div class="fixed bottom-0 left-0 right-0 w-full max-w-3xl mx-auto p-4 bg-gradient-to-t from-gray-50 via-gray-50 to-transparent pt-8 z-20">
+      <div v-if="alertMessage" class="mb-2 px-4 py-2 rounded-xl text-xs text-center text-white bg-green-600 transition-opacity">
+        {{ alertMessage }}
+      </div>
+      
+      <div class="grid grid-cols-3 gap-2 mb-2">
+        <!-- Copy report text -->
+        <button @click="copyToClipboard"
+                class="flex flex-col items-center justify-center gap-1 py-3 bg-white border border-gray-200 text-gray-700 rounded-2xl font-bold shadow-sm hover:bg-gray-50 active:scale-95 transition-all">
+          <i data-lucide="clipboard" class="w-4 h-4"></i>
+          <span class="text-[10px]">{{ formats.copy }}</span>
+        </button>
+        
+        <!-- Open in Viber -->
+        <button @click="sendToViber"
+                class="flex flex-col items-center justify-center gap-1 py-3 bg-[#7360f2] text-white rounded-2xl font-bold shadow-lg shadow-indigo-100 hover:bg-[#6351df] active:scale-95 transition-all">
+          <i data-lucide="send" class="w-4 h-4"></i>
+          <span class="text-[10px]">Viber</span>
+        </button>
+
+        <!-- Send directly to Telegram bot -->
+        <button @click="sendToTelegram"
+                :disabled="isSending"
+                class="flex flex-col items-center justify-center gap-1 py-3 bg-[#0088cc] text-white rounded-2xl font-bold shadow-lg shadow-blue-100 hover:bg-[#007cbd] active:scale-95 transition-all disabled:opacity-50"
+                :class="{'animate-pulse': isSending}">
+          <i data-lucide="send" class="w-4 h-4 -rotate-12"></i>
+          <span class="text-[10px]">Telegram</span>
+        </button>
+      </div>
+      <p class="text-[10px] text-center text-gray-400 font-medium">
+        Версія 1.0.0 • Розробник: Маценко С. М. (Izi Vayb)
+      </p>
+    </div>
+
+    <!-- Alarm background pulsing filter -->
+    <div v-if="shouldPulse" class="fixed inset-0 bg-red-600 pointer-events-none z-50 opacity-10 animate-pulse"></div>
+
+  </div>
+
+  <script>
+    const CONFIG = {
+      keyboard_layouts: [
+        { id: "uk", label: "Українська", is_default: true },
+        { id: "ru", label: "Русский", is_default: false },
+        { id: "en", label: "English", is_default: false }
+      ],
+      user_profile: {
+        full_name: "Маценко С. М.",
+        master_store: "087"
+      },
+      stores_database: [
+        { id: 277, prefix: "Пр-", status: "Ок", morning_check: false, evening_check: false },
+        { id: 412, prefix: "Пр-", status: "Ок", morning_check: false, evening_check: false },
+        { id: 454, prefix: "Пр-", status: "Ок", morning_check: false, evening_check: false },
+        { id: 698, prefix: "Пр-", status: "Ок", morning_check: false, evening_check: false },
+        { id: 87,  prefix: "Пр-", status: "Ок", morning_check: false, evening_check: false },
+        { id: 114, prefix: "Пр-", status: "Ок", morning_check: false, evening_check: false },
+        { id: 429, prefix: "Пр-", status: "Ок", morning_check: false, evening_check: false },
+        { id: 630, prefix: "По-", status: "Ок", morning_check: false, evening_check: false }
+      ],
+      status_options: [
+        "Ок",
+        "Не отписал",
+        "Не отписал. Не отвечает"
+      ],
+      logic_rules: {
+        report_template: "{current_date}\nПродукты {master_store}, {user_name}\nпо отзвону: {reporting_period}\n{stores_list}\nВсё ок",
+        viber_integration: "viber://forward?text={encoded_report}"
+      }
+    };
+
+    const { createApp, ref, computed, onMounted, watch } = Vue;
+
+    createApp({
+      setup() {
+        // Core state
+        const stores = ref([]);
+        const currentLang = ref('uk');
+        const isAlarmActive = ref(true);
+        const alarmStartTime = ref("22:00");
+        const alarmEndTime = ref("08:00");
+        const currentTime = ref(new Date());
+        const showSettings = ref(false);
+        const alertMessage = ref("");
+
+        // Telegram Integration Credentials
+        const botToken = ref("");
+        const chatId = ref("");
+        const isSending = ref(false);
+        const lastNotifiedTime = ref("");
+
+        // Load configs on mount
+        onMounted(() => {
+          // Stores lists
+          const savedStores = localStorage.getItem('store_reports_stores');
+          if (savedStores) {
+            try {
+              stores.value = JSON.parse(savedStores);
+            } catch (e) {
+              stores.value = JSON.parse(JSON.stringify(CONFIG.stores_database));
+            }
+          } else {
+            stores.value = JSON.parse(JSON.stringify(CONFIG.stores_database));
+          }
+
+          // Active language
+          const savedLang = localStorage.getItem('store_reports_lang');
+          currentLang.value = savedLang || 'uk';
+
+          // Alarm active
+          const savedAlarmActive = localStorage.getItem('store_reports_alarm_active');
+          isAlarmActive.value = savedAlarmActive !== null ? savedAlarmActive === 'true' : true;
+
+          // Alarm start and end
+          alarmStartTime.value = localStorage.getItem('store_reports_alarm_start') || "22:00";
+          alarmEndTime.value = localStorage.getItem('store_reports_alarm_end') || "08:00";
+
+          // Telegram credentials
+          botToken.value = localStorage.getItem('tg_bot_token') || "";
+          chatId.value = localStorage.getItem('tg_chat_id') || "";
+
+          // Start timer
+          setInterval(() => {
+            currentTime.value = new Date();
+            checkAutoTelegramAlerts();
+          }, 1000);
+
+          // Force lucide to render
+          setTimeout(() => {
+            lucide.createIcons();
+          }, 100);
+        });
+
+        // Watchers for settings saving
+        watch(stores, (newVal) => {
+          localStorage.setItem('store_reports_stores', JSON.stringify(newVal));
+        }, { deep: true });
+
+        watch(currentLang, (newVal) => {
+          localStorage.setItem('store_reports_lang', newVal);
+          triggerIconUpdate();
+        });
+
+        watch(isAlarmActive, (newVal) => {
+          localStorage.setItem('store_reports_alarm_active', String(newVal));
+        });
+
+        watch(alarmStartTime, (newVal) => {
+          localStorage.setItem('store_reports_alarm_start', newVal);
+        });
+
+        watch(alarmEndTime, (newVal) => {
+          localStorage.setItem('store_reports_alarm_end', newVal);
+        });
+
+        watch(showSettings, (newVal) => {
+          if (newVal) triggerIconUpdate();
+        });
+
+        const triggerIconUpdate = () => {
+          setTimeout(() => {
+            lucide.createIcons();
+          }, 50);
+        };
+
+        const saveStores = () => {
+          localStorage.setItem('store_reports_stores', JSON.stringify(stores.value));
+        };
+
+        const saveCredentials = () => {
+          localStorage.setItem('tg_bot_token', botToken.value);
+          localStorage.setItem('tg_chat_id', chatId.value);
+          showAlert("Дані Telegram збережено!");
+        };
+
+        // UI translation logic map
+        const formats = computed(() => {
+          const dicts = {
+            uk: { 
+              title: "Звітність магазинів", 
+              morning: "Ранок", 
+              evening: "Вечір", 
+              status: "Статус", 
+              send: "Надіслати у Viber", 
+              copy: "Копіювати текст",
+              reset: "Скинути дані?"
+            },
+            ru: { 
+              title: "Отчетность магазинов", 
+              morning: "Утро", 
+              evening: "Вечер", 
+              status: "Статус", 
+              send: "Отправить в Viber", 
+              copy: "Копировать текст",
+              reset: "Сбросить данные?"
+            },
+            en: { 
+              title: "Store Reporting", 
+              morning: "Morning", 
+              evening: "Evening", 
+              status: "Status", 
+              send: "Send to Viber", 
+              copy: "Copy Text",
+              reset: "Reset data?"
+            }
+          };
+          return dicts[currentLang.value] || dicts.uk;
+        });
+
+        // Date & Clock formatting
+        const formattedDate = computed(() => {
+          const date = currentTime.value;
+          const dd = String(date.getDate()).padStart(2, '0');
+          const mm = String(date.getMonth() + 1).padStart(2, '0');
+          const yyyy = date.getFullYear();
+          return `${dd}.${mm}.${yyyy}`;
+        });
+
+        const formattedTime = computed(() => {
+          const date = currentTime.value;
+          const hh = String(date.getHours()).padStart(2, '0');
+          const mm = String(date.getMinutes()).padStart(2, '0');
+          const ss = String(date.getSeconds()).padStart(2, '0');
+          return `${hh}:${mm}:${ss}`;
+        });
+
+        // Alarm checking logic
+        const inAlarmTimeRange = computed(() => {
+          const current = currentTime.value;
+          const [sH, sM] = alarmStartTime.value.split(':').map(Number);
+          const [eH, eM] = alarmEndTime.value.split(':').map(Number);
+          
+          const startMinutes = sH * 60 + sM;
+          const endMinutes = eH * 60 + eM;
+          const currentMinutes = current.getHours() * 60 + current.getMinutes();
+
+          if (startMinutes <= endMinutes) {
+            return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+          } else {
+            return currentMinutes >= startMinutes || currentMinutes < endMinutes;
+          }
+        });
+
+        const hasMissingChecks = computed(() => {
+          return stores.value.some(s => !s.morning_check || !s.evening_check);
+        });
+
+        const allChecksDone = computed(() => {
+          return stores.value.length > 0 && !hasMissingChecks.value;
+        });
+
+        const shouldPulse = computed(() => {
+          return isAlarmActive.value && inAlarmTimeRange.value && hasMissingChecks.value;
+        });
+
+        // Dynamic header background coloring
+        const isColoredHeader = computed(() => {
+          return shouldPulse.value || (allChecksDone.value && !shouldPulse.value);
+        });
+
+        const headerClasses = computed(() => {
+          if (shouldPulse.value) {
+            return 'bg-red-600 border-red-700 shadow-lg shadow-red-200 text-white';
+          }
+          if (allChecksDone.value) {
+            return 'bg-green-600 border-green-700 shadow-lg shadow-green-100 text-white';
+          }
+          return 'bg-white border-gray-200';
+        });
+
+        // Actions
+        const toggleCheck = (id, type) => {
+          stores.value = stores.value.map(s => {
+            if (s.id === id) {
+              return { ...s, [type]: !s[type] };
+            }
+            return s;
+          });
+        };
+
+        const resetData = () => {
+          stores.value = stores.value.map(s => ({
+            ...s,
+            morning_check: false,
+            evening_check: false,
+            status: CONFIG.status_options[0]
+          }));
+          showAlert("Всі позначки скинуто до початкових!");
+        };
+
+        const getReportingPeriod = () => {
+          const hour = currentTime.value.getHours();
+          return (hour >= 18 || hour < 10) ? "вечернем" : "дневном";
+        };
+
+        // Report text construction
+        const generateReport = () => {
+          const storesListText = stores.value
+            .map(s => `${s.prefix}${s.id}: ${s.status}`)
+            .join('\n');
+
+          return CONFIG.logic_rules.report_template
+            .replace('{current_date}', formattedDate.value)
+            .replace('{master_store}', CONFIG.user_profile.master_store)
+            .replace('{user_name}', CONFIG.user_profile.full_name)
+            .replace('{reporting_period}', getReportingPeriod())
+            .replace('{stores_list}', storesListText);
+        };
+
+        const copyToClipboard = () => {
+          const text = generateReport();
+          navigator.clipboard.writeText(text).then(() => {
+            showAlert("Текст звіту успішно скопійовано!");
+          }).catch(err => {
+            console.error("Copy failed", err);
+          });
+        };
+
+        const sendToViber = () => {
+          const reportText = generateReport();
+          const encoded = encodeURIComponent(reportText);
+          const url = CONFIG.logic_rules.viber_integration.replace('{encoded_report}', encoded);
+          window.location.href = url;
+        };
+
+        const sendToTelegram = async () => {
+          if (!botToken.value || !chatId.value) {
+            alert("Будь ласка, вкажіть Bot Token та Chat ID у налаштуваннях!");
+            showSettings.value = true;
+            return;
+          }
+
+          isSending.value = true;
+          try {
+            const reportText = generateReport();
+            const response = await fetch(`https://api.telegram.org/bot${botToken.value}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: chatId.value,
+                text: reportText
+              })
+            });
+
+            if (!response.ok) throw new Error('Помилка сервера');
+            showAlert('Звіт надіслано в Telegram!');
+          } catch (error) {
+            console.error(error);
+            alert('Не вдалося надіслати. Перевірте з’єднання та правильність токена!');
+          } finally {
+            isSending.value = false;
+          }
+        };
+
+        // Auto alerts interval checking
+        const checkAutoTelegramAlerts = async () => {
+          const checkTime = formattedTime.value.slice(0, 5); // "HH:mm"
+          if (checkTime !== lastNotifiedTime.value) {
+            if (hasMissingChecks.value && botToken.value && chatId.value) {
+              if (checkTime === "06:30") {
+                await sendAutoTelegramAlert("Izi Vayb, пора проверять данные магазинов! (Утренний отчет)");
+                lastNotifiedTime.value = checkTime;
+              } else if (checkTime === "22:00") {
+                await sendAutoTelegramAlert("Izi Vayb, пора проверять данные магазинов! (Вечерний отчет)");
+                lastNotifiedTime.value = checkTime;
+              }
+            }
+          }
+        };
+
+        const sendAutoTelegramAlert = async (text) => {
+          try {
+            await fetch(`https://api.telegram.org/bot${botToken.value}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: chatId.value,
+                text: text
+              })
+            });
+          } catch (e) {
+            console.error("Auto alert failed", e);
+          }
+        };
+
+        const showAlert = (msg) => {
+          alertMessage.value = msg;
+          setTimeout(() => {
+            alertMessage.value = "";
+          }, 4000);
+        };
+
+        return {
+          CONFIG,
+          stores,
+          currentLang,
+          isAlarmActive,
+          alarmStartTime,
+          alarmEndTime,
+          currentTime,
+          showSettings,
+          alertMessage,
+          botToken,
+          chatId,
+          isSending,
+          formats,
+          formattedDate,
+          formattedTime,
+          shouldPulse,
+          allChecksDone,
+          isColoredHeader,
+          headerClasses,
+          toggleCheck,
+          resetData,
+          copyToClipboard,
+          sendToViber,
+          sendToTelegram,
+          saveCredentials,
+          saveStores
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
